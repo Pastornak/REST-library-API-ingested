@@ -12,25 +12,21 @@ import java.util.*;
 import java.util.stream.IntStream;
 
 public class DataIngestion {
-    private final static String fileName = "data.sh";
+    private final static String fileName = "data.sql";
     private final static String fileLocation = "src/main/resources";
 
-    private final static int authorsCount = 150; // 9999 - is maximum (if set to max it greatly increase generation time)
-    private final static int genresCount = 30;   // 30 is maximum; if set more, will work endlessly!!!
-    private final static int booksCount = 1000;  // 9999 - is maximum (if set to max it greatly increase generation time)
+    private final static int authorsCount = 50; // 9999 - is maximum (if set to max it greatly increase generation time)
+    private final static int genresCount = 15;   // 30 is maximum; if set more, will work endlessly!!!
+    private final static int booksCount = 200;  // 9999 - is maximum (if set to max it greatly increase generation time)
 
     private static Faker f = new Faker();
 
     public static void main(String[] args) throws ParseException {
         List<String> bashLines = new ArrayList<>();
-        bashLines.add("#!/usr/bin/env bash");
-        String doPost = "curl -X POST --header 'Content-Type: application/json' --header 'Accept: application/json' -d \"%s\" '%s'";
-
-        String authorPostEnd = "localhost:8080/api/library/author";
-        String genrePostEnd = "localhost:8080/api/library/genre";
-        String bookPostEnd = "localhost:8080/api/library/book/%s/%s";
 
         //Author
+        bashLines.add("insert into author(author_id, first_name, second_name, birth_city, birth_country, birth_date, author_descr, nationality) values");
+        String authorValue = "(%d, '%s', '%s', '%s', '%s', '%s', '%s', '%s')";
         //generate unique Author ids;
         List<Long> authorIds = new ArrayList<>();
         while (authorIds.size() < authorsCount) {
@@ -50,16 +46,20 @@ public class DataIngestion {
         Date from = formatter.parse("1920-01-01");
         Date to = formatter.parse("1999-12-31");
 
-        authorIds.stream()
-                .map(id -> getAuthorJSON(
-                        id,
-                        f.name().firstName(), f.name().lastName(),
-                        nationalities[new Random().nextInt(nationalities.length)],
-                        formatter.format(f.date().between(from, to)), f.address().country(), f.address().city(),
-                        f.lorem().paragraph()))
-                .forEach(o -> bashLines.add(String.format(doPost, o, authorPostEnd)));
+        bashLines.add(authorIds.stream().map(id -> String.format(authorValue,
+                id,
+                normalizeString(f.name().firstName()),
+                normalizeString(f.name().lastName()),
+                normalizeString(f.address().city()),
+                normalizeString(f.address().country()),
+                formatter.format(f.date().between(from, to)),
+                normalizeString(f.lorem().paragraph()),
+                normalizeString(nationalities[new Random().nextInt(nationalities.length)])))
+        .reduce((a, b) -> a + ",\n" + b).get() + ";");
 
         //genre
+        bashLines.add("\ninsert into genre(genre_id, genre_name, genre_descr) values");
+        String genreValue = "(%d, '%s', '%s')";
         //generate all possible genre names
         List<String> genreNames = new ArrayList<>();
         while (genreNames.size() < genresCount) {
@@ -74,11 +74,17 @@ public class DataIngestion {
             if (!genreIds.contains(id)) genreIds.add(id);
         }
 
-        IntStream.range(0, genreIds.size())
-                .mapToObj(i -> getGenreJSON(genreIds.get(i), genreNames.get(i), f.lorem().paragraph()))
-                .forEach(o -> bashLines.add(String.format(doPost, o, genrePostEnd)));
+        bashLines.add(IntStream.range(0, genreIds.size())
+                .mapToObj(i -> String.format(genreValue,
+                        genreIds.get(i),
+                        normalizeString(genreNames.get(i)),
+                        normalizeString(f.lorem().paragraph())))
+        .reduce((a, b) -> a + ",\n" + b).get() + ";");
 
         //book
+        bashLines.add("\ninsert into book (book_id, book_name, book_language, book_descr, book_height, book_length, book_width, page_count, publication_year, author_id, genre_id) values");
+        String bookValue = "(%d, '%s', '%s', '%s', %.1f, %.1f, %.1f, %d, %d, %d, %d)";
+
         List<Long> bookIds = new ArrayList<>();
         while (bookIds.size() < booksCount) {
             long id = f.number().numberBetween(1L, 9999L);
@@ -88,20 +94,20 @@ public class DataIngestion {
         String[] languages = {"ukrainian", "german", "russian", "polish", "spanish", "belorussian", "chinese", "english",
                 "portuguese", "croatian", "french", "arabic", "armenian", "urdu", "farsi"};
 
-        bookIds.stream()
-                .map(bookId -> getBookJSON(bookId,
-                        generateBookName(),
-                        languages[new Random().nextInt(languages.length)],
-                        f.lorem().paragraph(),
-                        f.number().numberBetween(10, 1000),
+        // doing Locale.US to print doubles with dot instead of comma
+        bashLines.add(bookIds.stream().map(bookId -> String.format(Locale.US, bookValue,
+                        bookId,
+                        normalizeString(generateBookName()),
+                        normalizeString(languages[new Random().nextInt(languages.length)]),
+                        normalizeString(f.lorem().paragraph()),
                         f.number().randomDouble(1, 5, 40),
                         f.number().randomDouble(1, 1, 5),
                         f.number().randomDouble(1, 5, 40),
-                        f.number().numberBetween(1970, 2019)))
-                .forEach(o -> bashLines.add(String.format(doPost, o, String.format(
-                        bookPostEnd,
+                        f.number().numberBetween(10, 1000),
+                        f.number().numberBetween(1970, 2019),
                         authorIds.get(new Random().nextInt(authorIds.size())),
-                        genreIds.get(new Random().nextInt(genreIds.size()))))));
+                        genreIds.get(new Random().nextInt(genreIds.size()))))
+        .reduce((a, b) -> a + ",\n" + b).get() + ";");
 
         File script = new File(fileLocation + "/" + fileName);
         try {
@@ -113,6 +119,10 @@ public class DataIngestion {
         }
     }
 
+    private static String normalizeString(String value) {
+        return value.replace("'", "''");
+    }
+
     private static String generateBookName() {
         List<String> words = new ArrayList<>();
         IntStream.rangeClosed(0, f.number().numberBetween(2, 5))
@@ -121,52 +131,5 @@ public class DataIngestion {
         String first = words.get(0);
         words.set(0, first.substring(0, 1).toUpperCase() + first.substring(1));
         return String.join(" ", words);
-    }
-
-    private static String getAuthorJSON(long authorId, String first, String second, String nationality,
-                                        String birthDate, String country, String city, String descr) {
-        return new JSONObject()
-                .put("authorId", authorId)
-                .put("authorName", new JSONObject()
-                        .put("first", first)
-                        .put("second", second))
-                .put("nationality", nationality)
-                .put("birth", new JSONObject()
-                        .put("date", birthDate)
-                        .put("country", country)
-                        .put("city", city))
-                .put("authorDescription", descr)
-
-                .toString()
-                .replace("\"", "\\\"");
-    }
-
-    private static String getGenreJSON(long genreId, String genreName, String genreDescription) {
-        return new JSONObject()
-                .put("genreId", genreId)
-                .put("genreName", genreName)
-                .put("genreDescription", genreDescription)
-
-                .toString()
-                .replace("\"", "\\\"");
-    }
-
-    private static String getBookJSON(long bookId, String bookName, String bookLang, String bookDescr, int pageCount,
-                                      double height, double width, double length, int pubYear) {
-        return new JSONObject()
-                .put("bookId", bookId)
-                .put("bookName", bookName)
-                .put("bookLanguage", bookLang)
-                .put("bookDescription", bookDescr)
-                .put("additional", new JSONObject()
-                        .put("pageCount", pageCount)
-                        .put("size", new JSONObject()
-                                .put("height", height)
-                                .put("width", width)
-                                .put("length", length)))
-                .put("publicationYear", pubYear)
-
-                .toString()
-                .replace("\"", "\\\"");
     }
 }
