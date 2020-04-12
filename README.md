@@ -1,5 +1,6 @@
 # REST-library
-A simple REST API that represent Library.
+This API is just an addition to REST-library API by Roman Shmandrovskyi: https://github.com/RomanShmandrovskyi/REST-library-API.
+The only difference being data being ingested into DB on the start-up.
 
 There are 3 tables: `Author`, `Genre` and `Book`.
 
@@ -8,18 +9,16 @@ One Author has many Books (for Genre too) and one Book must has one Author and o
 ## Getting started
 1. Clone project:
 ```
-git clone https://github.com/RoshS/REST-library.git
+git clone https://github.com/Pastornak/REST-library-API-ingested.git
 ```
 
 2. Open `src/main/resources/application.properties` file and enter instead `<data_base_name>` name you want for your data base:
 ```
 spring.datasource.dbname=<data_base_name>
 ```
-2.1. The API will up on built in data base H2 and DB file will store here: `src/main/resources/db`, so if you restart API you don't lose your data.
-Also you can change DB file location if you want:
-```
-spring.datasource.dbpath=./src/main/resources/db
-```
+2.1. The API will up on built-in data base H2 will be injected with data;
+Queries for injected data can be found at `/src/main/resources/data.sql`;
+
 2.2. It is also possible to up API using SQL data base. To do this, just change thre last config properties to:
 ```
 spring.datasource.url=jdbc:mysql://localhost:3306/${spring.datasource.dbname}?serverTimezone=UTC
@@ -59,6 +58,6 @@ private final static int booksCount = 1000;
 ```
 Note the comments on these fields.
 
-When generation will be finished, go to `resources`. Here will be generated `addData.sh` script file. Just run it and wait for DB filling.
+When generation will be finished, go to `resources`. Here will be generated `data.sql` script file. Just let it be, the DB will be filled on the start-up.
 
 After that you can fully feel all opportunities of REST Library API.
